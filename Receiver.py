@@ -13,7 +13,7 @@ class Connection():
         self.host = host
         self.port = port
         self.max_buf_size = 5
-        self.outfile = open("%s.%d" % (host,port),"w")
+        self.outfile = open("%s.%d" % (host,port),"wb")
         self.seqnums = {} # enforce single instance of each seqno
 
     def ack(self,seqno, data, sackMode = False):
@@ -43,7 +43,7 @@ class Connection():
 
 
     def record(self,data):
-        self.outfile.write(data)
+        self.outfile.write(data.encode('latin-1'))
         self.outfile.flush()
 
     def end(self):
