@@ -17,13 +17,16 @@ class Sender(BasicSender.BasicSender):
         self.end=0
         self.packets=[]
         self.sack_mode=sackMode
-        if sackMode:
-            raise NotImplementedError #remove this line when you implement SACK
+
     
     def get_ack(self,response_packet):
         pieces = response_packet.split('|')
         ack=int(pieces[1])
         return ack
+    def get_seq(self,packet):
+        pieces = packet.split('|')
+        seq=int(pieces[1])
+        return seq
     
     def send_window(self):
         for packet in self.packets:
@@ -39,6 +42,68 @@ class Sender(BasicSender.BasicSender):
         else:
             self.packets.pop(0)
             self.packets.append(packet)
+
+    def GBN_send_receive(self,seqno):
+        success=0
+        while True:
+            if len(self.packets)==0:
+                break
+            self.send_window()
+            
+            while True:
+                response = self.receive(0.5)
+                if response :
+                    response = response.decode()
+                    if self.get_ack(response) == seqno:
+                        success=1
+                        break
+                else:
+                    break
+
+            if success:
+                break
+
+    def sack_packet(self,response):
+        msg, ack_string, checksum = response.rsplit('|', 2)
+        ack, sack_string = ack_string.rsplit(';',1)
+        if sack_string:
+            sack_list = sack_string.split(',')
+        else:
+            sack_list = []
+        for sack in sack_list:
+            sack=int(sack)
+
+        return int(ack),sack_list
+    
+    def select(self,sack_list):
+        for packet in self.packets:
+            seq=self.get_seq(packet)
+            if seq in sack_list:
+                self.packets.remove(packet)
+
+    def SR_send_receive(self,seqno):
+        success=0
+        while True:
+            if len(self.packets)==0:
+                break
+            self.send_window()
+            
+            while True:
+                response = self.receive(0.5)
+                if response :
+                    response = response.decode()
+                    ack, sack_list = self.sack_packet(response)
+
+                    if ack == seqno:
+                        success=1
+                        break
+                    else:
+                        self.select(sack_list)
+                else:
+                    break
+
+            if success:
+                break
     # Main sending loop.
     def start(self):
         # raise NotImplementedError
@@ -67,26 +132,11 @@ class Sender(BasicSender.BasicSender):
                 packet = self.make_packet(msg_type,seqno,msg)
                 self.push_packet(packet)
                 seqno+=1
-
-            success=0
-            while True:
-                if len(self.packets)==0:
-                    break
-                self.send_window()
-                
-                while True:
-                    response = self.receive(0.5)
-                    if response :
-                        response = response.decode()
-                        if self.get_ack(response) == seqno:
-                            success=1
-                            break
-                    else:
-                        break
-    
-                if success:
-                    
-                    break
+            
+            if self.sack_mode:
+                self.SR_send_receive(seqno)
+            else:
+                self.GBN_send_receive(seqno)
             
             if self.end:
                 break
